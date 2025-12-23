@@ -261,10 +261,8 @@
   Quagga.CameraAccess.enumerateVideoDevices({
       facingMode: 'environment'
   }).then(function(d) {
-    devices = d[3].deviceId;
-    d.forEach(function(device) {
-      deviceEl.textContent += device.label + ' ' + device.deviceId     
-    })
+    devices = d[d.length - 1].deviceId;
+    deviceEl.textContent += devices.label + ' ' +devices.deviceId
   }) 
 </script>
 
