@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <title>LIFF EAN-13 Scanner (Debug)</title>
+  <title>LIFF EAN-13 Scanner – Stable Debug</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 
   <!-- LIFF SDK -->
@@ -22,7 +22,7 @@
 
     h1 {
       font-size: 20px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     #hint {
@@ -31,19 +31,31 @@
       margin-bottom: 12px;
     }
 
+    /* Camera wrapper – FIX ASPECT RATIO */
     #camera {
       position: relative;
       width: 100%;
       max-width: 360px;
+      aspect-ratio: 4 / 3;
       margin: 0 auto;
+      background: #000;
       display: none;
-    }
-
-    video, canvas {
-      width: 100%;
+      overflow: hidden;
       border-radius: 12px;
     }
 
+    /* Video & Overlay MUST MATCH */
+    #camera video,
+    #camera canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Visual scan frame (UX only) */
     #frame {
       position: absolute;
       top: 50%;
@@ -54,6 +66,7 @@
       border: 2px solid #00c300;
       border-radius: 8px;
       pointer-events: none;
+      z-index: 10;
     }
 
     button {
@@ -87,7 +100,7 @@
 </head>
 <body>
 
-  <h1>EAN-13 Scanner (Debug Mode)</h1>
+  <h1>EAN-13 Scanner (Debug)</h1>
   <div id="hint">
     เล็งบาร์โค้ดให้อยู่ในกรอบ ถือให้นิ่ง 1–2 วินาที
   </div>
@@ -102,6 +115,9 @@
   <div id="status">สถานะ: รอเริ่มต้น</div>
 
   <script>
+    // =========================
+    // CONFIG
+    // =========================
     const LIFF_ID = "2008742009-qDKcYJFh";
 
     const startBtn = document.getElementById("startBtn");
@@ -112,17 +128,27 @@
     let scanning = false;
     let detectedCount = {};
 
+    // =========================
+    // LIFF INIT
+    // =========================
     async function initLIFF() {
-      await liff.init({ liffId: LIFF_ID });
-      statusEl.textContent = "สถานะ: LIFF พร้อมใช้งาน";
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        statusEl.textContent = "สถานะ: LIFF พร้อมใช้งาน";
+      } catch (e) {
+        statusEl.textContent = "LIFF init error";
+        console.error(e);
+      }
     }
 
+    // =========================
+    // START SCANNER
+    // =========================
     function startScanner() {
       if (scanning) return;
 
-      detectedCount = {};
       scanning = true;
-
+      detectedCount = {};
       resultEl.textContent = "";
       cameraEl.style.display = "block";
       startBtn.disabled = true;
@@ -134,33 +160,31 @@
           target: cameraEl,
           constraints: {
             facingMode: "environment",
-            width: { min: 640, ideal: 1280 },
-            height: { min: 480, ideal: 720 }
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           },
           area: {
-            top: "35%",
-            right: "15%",
-            left: "15%",
-            bottom: "35%"
+            top: "30%",
+            right: "10%",
+            left: "10%",
+            bottom: "30%"
           }
         },
         decoder: {
-          readers: [{
-            format: "ean_reader",
-            config: { supplements: [] }
-          }]
+          readers: ["ean_reader"]
         },
         locate: true,
         locator: {
-          patchSize: "medium",
-          halfSample: true
+          patchSize: "large",
+          halfSample: false
         },
-        numOfWorkers: navigator.hardwareConcurrency || 4
+        numOfWorkers: 1
       }, err => {
         if (err) {
+          console.error(err);
           statusEl.textContent = "ไม่สามารถเปิดกล้องได้";
-          startBtn.disabled = false;
           scanning = false;
+          startBtn.disabled = false;
           return;
         }
         Quagga.start();
@@ -170,6 +194,9 @@
       Quagga.onDetected(onDetected);
     }
 
+    // =========================
+    // DETECT LOGIC (MULTI-FRAME)
+    // =========================
     function onDetected(data) {
       const code = data.codeResult.code;
       if (!code || code.length !== 13) return;
@@ -197,45 +224,32 @@
     }
 
     // =========================
-    // DEBUG OVERLAY
+    // DEBUG OVERLAY (CRITICAL)
     // =========================
     function onProcessed(result) {
       const ctx = Quagga.canvas.ctx.overlay;
       const canvas = Quagga.canvas.dom.overlay;
 
+      if (!ctx || !canvas) return;
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (result) {
-        if (result.boxes) {
-          result.boxes
-            .filter(box => box !== result.box)
-            .forEach(box => {
-              Quagga.ImageDebug.drawPath(
-                box,
-                { x: 0, y: 1 },
-                ctx,
-                { color: "rgba(255, 255, 255, 0.3)", lineWidth: 1 }
-              );
-            });
-        }
+      if (result && result.box) {
+        Quagga.ImageDebug.drawPath(
+          result.box,
+          { x: 0, y: 1 },
+          ctx,
+          { color: "lime", lineWidth: 2 }
+        );
+      }
 
-        if (result.box) {
-          Quagga.ImageDebug.drawPath(
-            result.box,
-            { x: 0, y: 1 },
-            ctx,
-            { color: "#00FF00", lineWidth: 2 }
-          );
-        }
-
-        if (result.line) {
-          Quagga.ImageDebug.drawPath(
-            result.line,
-            { x: "x", y: "y" },
-            ctx,
-            { color: "red", lineWidth: 3 }
-          );
-        }
+      if (result && result.line) {
+        Quagga.ImageDebug.drawPath(
+          result.line,
+          { x: "x", y: "y" },
+          ctx,
+          { color: "red", lineWidth: 4 }
+        );
       }
     }
 
