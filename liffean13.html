@@ -167,6 +167,7 @@
     // ===============================
     function onDetected(data) {
       const code = data.codeResult.code;
+      const format = data.codeResult.format;
 
       if (!code || code.length !== 13) return;
 
@@ -177,7 +178,7 @@
       startBtn.disabled = false;
 
       cameraEl.style.display = "none";
-      resultEl.textContent = "EAN-13: " + code;
+      resultEl.textContent = format + ": " + code;
       statusEl.textContent = "สแกนสำเร็จ";
 
       if (navigator.vibrate) {
