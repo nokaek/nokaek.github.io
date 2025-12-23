@@ -262,7 +262,7 @@
       facingMode: 'environment'
   }).then(function(d) {
     devices = d[d.length - 1].deviceId;
-    deviceEl.textContent += devices.label + ' ' +devices.deviceId
+    deviceEl.textContent += d[d.length - 1].label + ' ' +d[d.length - 1].deviceId
   }) 
 </script>
 
