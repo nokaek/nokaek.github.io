@@ -262,7 +262,7 @@
       facingMode: 'environment'
   }).then(function(d) {
     devices = d[3].deviceId;
-    devices.forEach(function(device) {
+    d.forEach(function(device) {
       deviceEl.textContent += device.label + ' ' + device.deviceId     
     })
   }) 
