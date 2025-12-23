@@ -2,13 +2,10 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <title>LIFF EAN-13 Scanner – Stable Debug</title>
+  <title>LIFF EAN-13 Scanner – Focus Guide</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 
-  <!-- LIFF SDK -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-
-  <!-- QuaggaJS -->
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
 
   <style>
@@ -25,13 +22,6 @@
       margin-bottom: 6px;
     }
 
-    #hint {
-      font-size: 14px;
-      color: #555;
-      margin-bottom: 12px;
-    }
-
-    /* Camera wrapper – FIX ASPECT RATIO */
     #camera {
       position: relative;
       width: 100%;
@@ -44,18 +34,42 @@
       border-radius: 12px;
     }
 
-    /* Video & Overlay MUST MATCH */
     #camera video,
     #camera canvas {
       position: absolute;
-      top: 0;
-      left: 0;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
 
-    /* Visual scan frame (UX only) */
+    /* === UX Focus Guide === */
+
+    #focus-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 180px;
+      height: 180px;
+      transform: translate(-50%, -50%);
+      border: 2px dashed rgba(255,255,255,0.8);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    #focus-text {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      pointer-events: none;
+    }
+
     #frame {
       position: absolute;
       top: 50%;
@@ -66,7 +80,6 @@
       border: 2px solid #00c300;
       border-radius: 8px;
       pointer-events: none;
-      z-index: 10;
     }
 
     button {
@@ -100,162 +113,99 @@
 </head>
 <body>
 
-  <h1>EAN-13 Scanner (Debug)</h1>
-  <div id="hint">
-    เล็งบาร์โค้ดให้อยู่ในกรอบ ถือให้นิ่ง 1–2 วินาที
-  </div>
+<h1>EAN-13 Scanner</h1>
 
-  <div id="camera">
-    <div id="frame"></div>
-  </div>
+<div id="camera">
+  <div id="frame"></div>
+  <div id="focus-ring"></div>
+  <div id="focus-text">ถือมือถือห่างจากบาร์โค้ด ~1 ฝ่ามือ</div>
+</div>
 
-  <button id="startBtn">เปิดกล้องสแกนบาร์โค้ด</button>
+<button id="startBtn">เปิดกล้องสแกนบาร์โค้ด</button>
 
-  <div id="result"></div>
-  <div id="status">สถานะ: รอเริ่มต้น</div>
+<div id="result"></div>
+<div id="status">สถานะ: รอเริ่มต้น</div>
 
-  <script>
-    // =========================
-    // CONFIG
-    // =========================
-    const LIFF_ID = "2008742009-qDKcYJFh";
+<script>
+  const LIFF_ID = "2008742009-qDKcYJFh";
 
-    const startBtn = document.getElementById("startBtn");
-    const cameraEl = document.getElementById("camera");
-    const resultEl = document.getElementById("result");
-    const statusEl = document.getElementById("status");
+  const startBtn = document.getElementById("startBtn");
+  const cameraEl = document.getElementById("camera");
+  const resultEl = document.getElementById("result");
+  const statusEl = document.getElementById("status");
+  const focusTextEl = document.getElementById("focus-text");
 
-    let scanning = false;
-    let detectedCount = {};
+  let scanning = false;
+  let detectedCount = {};
 
-    // =========================
-    // LIFF INIT
-    // =========================
-    async function initLIFF() {
-      try {
-        await liff.init({ liffId: LIFF_ID });
-        statusEl.textContent = "สถานะ: LIFF พร้อมใช้งาน";
-      } catch (e) {
-        statusEl.textContent = "LIFF init error";
-        console.error(e);
-      }
-    }
+  async function initLIFF() {
+    await liff.init({ liffId: LIFF_ID });
+  }
 
-    // =========================
-    // START SCANNER
-    // =========================
-    function startScanner() {
-      if (scanning) return;
+  function startScanner() {
+    if (scanning) return;
 
-      scanning = true;
-      detectedCount = {};
-      resultEl.textContent = "";
-      cameraEl.style.display = "block";
-      startBtn.disabled = true;
-      statusEl.textContent = "สถานะ: กำลังสแกน…";
+    scanning = true;
+    detectedCount = {};
+    cameraEl.style.display = "block";
+    startBtn.disabled = true;
+    statusEl.textContent = "สถานะ: กำลังสแกน…";
+    focusTextEl.textContent = "ถือมือถือห่างจากบาร์โค้ด ~1 ฝ่ามือ";
 
-      Quagga.init({
-        inputStream: {
-          type: "LiveStream",
-          target: cameraEl,
-          constraints: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          area: {
-            top: "30%",
-            right: "10%",
-            left: "10%",
-            bottom: "30%"
-          }
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: cameraEl,
+        constraints: {
+          facingMode: "environment",
+          width: { ideal: 960 },
+          height: { ideal: 720 }
         },
-        decoder: {
-          readers: ["ean_reader"]
-        },
-        locate: true,
-        locator: {
-          patchSize: "large",
-          halfSample: false
-        },
-        numOfWorkers: 1
-      }, err => {
-        if (err) {
-          console.error(err);
-          statusEl.textContent = "ไม่สามารถเปิดกล้องได้";
-          scanning = false;
-          startBtn.disabled = false;
-          return;
+        area: {
+          top: "30%",
+          right: "10%",
+          left: "10%",
+          bottom: "30%"
         }
-        Quagga.start();
-      });
-
-      Quagga.onProcessed(onProcessed);
-      Quagga.onDetected(onDetected);
-    }
-
-    // =========================
-    // DETECT LOGIC (MULTI-FRAME)
-    // =========================
-    function onDetected(data) {
-      const code = data.codeResult.code;
-      if (!code || code.length !== 13) return;
-
-      detectedCount[code] = (detectedCount[code] || 0) + 1;
-
-      if (detectedCount[code] >= 3) {
-        finalize(code);
+      },
+      decoder: {
+        readers: ["ean_reader"]
+      },
+      locate: true,
+      locator: {
+        patchSize: "large",
+        halfSample: false
+      },
+      numOfWorkers: 1
+    }, err => {
+      if (err) {
+        statusEl.textContent = "เปิดกล้องไม่สำเร็จ";
+        startBtn.disabled = false;
+        scanning = false;
+        return;
       }
+      Quagga.start();
+    });
+
+    Quagga.onProcessed(onProcessed);
+    Quagga.onDetected(onDetected);
+  }
+
+  function onDetected(data) {
+    const code = data.codeResult.code;
+    if (!code || code.length !== 13) return;
+
+    detectedCount[code] = (detectedCount[code] || 0) + 1;
+
+    if (detectedCount[code] === 1) {
+      focusTextEl.textContent = "นิ่งไว้นิดหนึ่ง กำลังอ่านบาร์โค้ด…";
     }
 
-    function finalize(code) {
-      Quagga.stop();
-      Quagga.offDetected(onDetected);
-      Quagga.offProcessed(onProcessed);
-
-      scanning = false;
-      startBtn.disabled = false;
-      cameraEl.style.display = "none";
-
-      resultEl.textContent = "EAN-13: " + code;
-      statusEl.textContent = "สแกนสำเร็จ";
-
-      if (navigator.vibrate) navigator.vibrate(200);
+    if (detectedCount[code] >= 3) {
+      finalize(code);
     }
+  }
 
-    // =========================
-    // DEBUG OVERLAY (CRITICAL)
-    // =========================
-    function onProcessed(result) {
-      const ctx = Quagga.canvas.ctx.overlay;
-      const canvas = Quagga.canvas.dom.overlay;
-
-      if (!ctx || !canvas) return;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (result && result.box) {
-        Quagga.ImageDebug.drawPath(
-          result.box,
-          { x: 0, y: 1 },
-          ctx,
-          { color: "lime", lineWidth: 2 }
-        );
-      }
-
-      if (result && result.line) {
-        Quagga.ImageDebug.drawPath(
-          result.line,
-          { x: "x", y: "y" },
-          ctx,
-          { color: "red", lineWidth: 4 }
-        );
-      }
-    }
-
-    startBtn.addEventListener("click", startScanner);
-    initLIFF();
-  </script>
-
-</body>
-</html>
+  function finalize(code) {
+    Quagga.stop();
+    Q
