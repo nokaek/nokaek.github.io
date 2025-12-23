@@ -140,7 +140,7 @@
 
   let scanning = false;
   let detectedCount = {};
-  let devices = [];
+  let devices = '';
 
   async function initLIFF() {
     await liff.init({ liffId: LIFF_ID });
@@ -164,7 +164,7 @@
           facingMode: "environment",
           width: { min: 1600 },
           height: { min: 960 },
-          deviceId: devices[3].deviceId
+          deviceId: devices
         },
         area: {
           top: "30%",
@@ -261,7 +261,7 @@
   Quagga.CameraAccess.enumerateVideoDevices({
       facingMode: 'environment'
   }).then(function(d) {
-    devices = d;
+    devices = d[3].deviceId;
     devices.forEach(function(device) {
       deviceEl.textContent += device.label + ' ' + device.deviceId     
     })
