@@ -127,7 +127,7 @@
 <div id="status">สถานะ: รอเริ่มต้น</div>
 
 <script>
-  const LIFF_ID = "2008742009-qDKcYJFh";
+  const LIFF_ID = "PUT_YOUR_LIFF_ID_HERE";
 
   const startBtn = document.getElementById("startBtn");
   const cameraEl = document.getElementById("camera");
@@ -208,4 +208,29 @@
 
   function finalize(code) {
     Quagga.stop();
-    Q
+    Quagga.offDetected(onDetected);
+    Quagga.offProcessed(onProcessed);
+
+    scanning = false;
+    startBtn.disabled = false;
+    cameraEl.style.display = "none";
+
+    resultEl.textContent = "EAN-13: " + code;
+    statusEl.textContent = "สแกนสำเร็จ";
+
+    if (navigator.vibrate) navigator.vibrate(200);
+  }
+
+  function onProcessed(result) {
+    // UX-driven focus hint
+    if (!result || !result.box) {
+      focusTextEl.textContent = "ลองขยับมือถือเข้า–ออกเล็กน้อย";
+    }
+  }
+
+  startBtn.addEventListener("click", startScanner);
+  initLIFF();
+</script>
+
+</body>
+</html>
