@@ -140,6 +140,7 @@
 
   let scanning = false;
   let detectedCount = {};
+  let devices = [];
 
   async function initLIFF() {
     await liff.init({ liffId: LIFF_ID });
@@ -154,17 +155,8 @@
     startBtn.disabled = true;
     statusEl.textContent = "สถานะ: กำลังสแกน…";
     focusTextEl.textContent = "ถือมือถือห่างจากบาร์โค้ด ~1 ฝ่ามือ";
-
-    Quagga.CameraAccess.enumerateVideoDevices({
-      facingMode: 'environment'
-    }).then(function(devices) {
-
-      devices.forEach(function(device) {
-        deviceEl.textContent += device.label + ' ' + device.deviceId
-        
-      })
-
-      Quagga.init({
+    
+    Quagga.init({
       inputStream: {
         type: "LiveStream",
         target: cameraEl,
@@ -172,7 +164,7 @@
           facingMode: "environment",
           width: { min: 1600 },
           height: { min: 960 },
-          deviceId: devices[0].deviceId
+          deviceId: devices[3].deviceId
         },
         area: {
           top: "30%",
@@ -203,7 +195,6 @@
       
       Quagga.onProcessed(onProcessed);
       Quagga.onDetected(onDetected);
-    })    
   }
 
   function onDetected(data) {
@@ -266,6 +257,15 @@
 
   startBtn.addEventListener("click", startScanner);
   initLIFF();
+
+  Quagga.CameraAccess.enumerateVideoDevices({
+      facingMode: 'environment'
+  }).then(function(d) {
+    devices = d;
+    devices.forEach(function(device) {
+      deviceEl.textContent += device.label + ' ' + device.deviceId     
+    })
+  }) 
 </script>
 
 </body>
