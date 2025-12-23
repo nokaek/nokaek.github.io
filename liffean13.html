@@ -152,11 +152,11 @@
     statusEl.textContent = "สถานะ: กำลังสแกน…";
     focusTextEl.textContent = "ถือมือถือห่างจากบาร์โค้ด ~1 ฝ่ามือ";
 
-    const backCameras = await Quagga.CameraAccess.enumerateVideoDevices({
+    Quagga.CameraAccess.enumerateVideoDevices({
       facingMode: 'environment'
-    });
+    }).then(function(devices) {
 
-    Quagga.init({
+      Quagga.init({
       inputStream: {
         type: "LiveStream",
         target: cameraEl,
@@ -164,7 +164,7 @@
           facingMode: "environment",
           width: { min: 1600 },
           height: { min: 960 },
-          deviceId = backCameras[0].deviceId
+          deviceId = devices[0].deviceId
         },
         area: {
           top: "30%",
@@ -183,7 +183,7 @@
         halfSample: true
       },
       numOfWorkers: 1
-    }, err => {
+      }, err => {
       if (err) {
         statusEl.textContent = "เปิดกล้องไม่สำเร็จ";
         startBtn.disabled = false;
@@ -191,10 +191,11 @@
         return;
       }
       Quagga.start();
-    });
-
-    Quagga.onProcessed(onProcessed);
-    Quagga.onDetected(onDetected);
+      });
+      
+      Quagga.onProcessed(onProcessed);
+      Quagga.onDetected(onDetected);
+    })    
   }
 
   function onDetected(data) {
