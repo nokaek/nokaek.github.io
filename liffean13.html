@@ -99,7 +99,7 @@
     // ===============================
     // CONFIG
     // ===============================
-    const LIFF_ID = "PUT_YOUR_LIFF_ID_HERE";
+    const LIFF_ID = "2008742009-qDKcYJFh";
 
     const startBtn = document.getElementById("startBtn");
     const cameraEl = document.getElementById("camera");
@@ -169,7 +169,8 @@
       const code = data.codeResult.code;
       const format = data.codeResult.format;
 
-      if (!code || code.length !== 13) return;
+      //if (!code || code.length !== 13) return;
+      if (!code) return;
 
       Quagga.offDetected(onDetected);
       Quagga.stop();
