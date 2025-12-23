@@ -152,6 +152,10 @@
     statusEl.textContent = "สถานะ: กำลังสแกน…";
     focusTextEl.textContent = "ถือมือถือห่างจากบาร์โค้ด ~1 ฝ่ามือ";
 
+    const backCameras = await Quagga.CameraAccess.enumerateVideoDevices({
+      facingMode: 'environment'
+    });
+
     Quagga.init({
       inputStream: {
         type: "LiveStream",
@@ -159,7 +163,8 @@
         constraints: {
           facingMode: "environment",
           width: { min: 1600 },
-          height: { min: 960 }
+          height: { min: 960 },
+          deviceId = backCameras[0].deviceId
         },
         area: {
           top: "30%",
