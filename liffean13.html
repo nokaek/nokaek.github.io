@@ -155,6 +155,13 @@
     startBtn.disabled = true;
     statusEl.textContent = "สถานะ: กำลังสแกน…";
     focusTextEl.textContent = "ถือมือถือห่างจากบาร์โค้ด ~1 ฝ่ามือ";
+
+    Quagga.CameraAccess.enumerateVideoDevices({
+        facingMode: 'environment'
+    }).then(function(d) {
+      devices = d[d.length - 1].deviceId;
+      deviceEl.textContent += d[d.length - 1].label + ' ' +d[d.length - 1].deviceId
+    }) 
     
     Quagga.init({
       inputStream: {
@@ -257,13 +264,6 @@
 
   startBtn.addEventListener("click", startScanner);
   initLIFF();
-
-  Quagga.CameraAccess.enumerateVideoDevices({
-      facingMode: 'environment'
-  }).then(function(d) {
-    devices = d[d.length - 1].deviceId;
-    deviceEl.textContent += d[d.length - 1].label + ' ' +d[d.length - 1].deviceId
-  }) 
 </script>
 
 </body>
