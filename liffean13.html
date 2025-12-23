@@ -141,10 +141,22 @@
             facingMode: "environment",
             width: { ideal: 640 },
             height: { ideal: 480 }
+          },
+          area: { // defines rectangle of the detection/localization area
+            top: "0%",    // top offset
+            right: "0%",  // right offset
+            left: "0%",   // left offset
+            bottom: "0%"  // bottom offset
           }
         },
         decoder: {
-          readers: ["ean_reader"]
+          readers: ["ean_reader"],
+          debug: {
+              drawBoundingBox: true,
+              showFrequency: true,
+              drawScanline: true,
+              showPattern: true
+          }          
         },
         locate: true,
         numOfWorkers: navigator.hardwareConcurrency || 4
