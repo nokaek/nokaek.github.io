@@ -159,7 +159,10 @@
       facingMode: 'environment'
     }).then(function(devices) {
 
-      deviceEl.textContent = 'กล้อง: ' + devices[0].label + ' ' + devices[0].deviceId
+      devices.forEach(function(device) {
+        deviceEl.textContent += device.label + ' ' + device.deviceId
+        
+      })
 
       Quagga.init({
       inputStream: {
