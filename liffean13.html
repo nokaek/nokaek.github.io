@@ -2,26 +2,32 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <title>LIFF EAN-13 Scanner (QuaggaJS)</title>
+  <title>LIFF EAN-13 Scanner (Debug)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 
   <!-- LIFF SDK -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
-  <!-- QuaggaJS (maintained fork) -->
+  <!-- QuaggaJS -->
   <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
 
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #f5f5f5;
       margin: 0;
       padding: 16px;
+      background: #f5f5f5;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       text-align: center;
     }
 
     h1 {
       font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    #hint {
+      font-size: 14px;
+      color: #555;
       margin-bottom: 12px;
     }
 
@@ -33,12 +39,11 @@
       display: none;
     }
 
-    video {
+    video, canvas {
       width: 100%;
       border-radius: 12px;
     }
 
-    /* Scan frame */
     #frame {
       position: absolute;
       top: 50%;
@@ -48,20 +53,19 @@
       transform: translate(-50%, -50%);
       border: 2px solid #00c300;
       border-radius: 8px;
-      box-sizing: border-box;
+      pointer-events: none;
     }
 
     button {
       margin-top: 12px;
-      padding: 12px 16px;
-      font-size: 16px;
-      border: none;
-      border-radius: 8px;
-      background: #00c300;
-      color: #fff;
-      cursor: pointer;
+      padding: 12px;
       width: 100%;
       max-width: 360px;
+      font-size: 16px;
+      background: #00c300;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
     }
 
     button:disabled {
@@ -72,11 +76,10 @@
       margin-top: 16px;
       font-size: 18px;
       font-weight: bold;
-      color: #333;
     }
 
     #status {
-      margin-top: 8px;
+      margin-top: 6px;
       font-size: 14px;
       color: #666;
     }
@@ -84,7 +87,10 @@
 </head>
 <body>
 
-  <h1>📦 EAN-13 Barcode Scanner</h1>
+  <h1>EAN-13 Scanner (Debug Mode)</h1>
+  <div id="hint">
+    เล็งบาร์โค้ดให้อยู่ในกรอบ ถือให้นิ่ง 1–2 วินาที
+  </div>
 
   <div id="camera">
     <div id="frame"></div>
@@ -96,10 +102,7 @@
   <div id="status">สถานะ: รอเริ่มต้น</div>
 
   <script>
-    // ===============================
-    // CONFIG
-    // ===============================
-    const LIFF_ID = "2008742009-qDKcYJFh";
+    const LIFF_ID = "PUT_YOUR_LIFF_ID_HERE";
 
     const startBtn = document.getElementById("startBtn");
     const cameraEl = document.getElementById("camera");
@@ -107,31 +110,23 @@
     const statusEl = document.getElementById("status");
 
     let scanning = false;
+    let detectedCount = {};
 
-    // ===============================
-    // LIFF INIT
-    // ===============================
     async function initLIFF() {
-      try {
-        await liff.init({ liffId: LIFF_ID });
-        statusEl.textContent = "สถานะ: LIFF พร้อมใช้งาน";
-      } catch (err) {
-        statusEl.textContent = "LIFF init error";
-        console.error(err);
-      }
+      await liff.init({ liffId: LIFF_ID });
+      statusEl.textContent = "สถานะ: LIFF พร้อมใช้งาน";
     }
 
-    // ===============================
-    // START SCANNER
-    // ===============================
     function startScanner() {
       if (scanning) return;
+
+      detectedCount = {};
+      scanning = true;
 
       resultEl.textContent = "";
       cameraEl.style.display = "block";
       startBtn.disabled = true;
       statusEl.textContent = "สถานะ: กำลังสแกน…";
-      scanning = true;
 
       Quagga.init({
         inputStream: {
@@ -139,30 +134,30 @@
           target: cameraEl,
           constraints: {
             facingMode: "environment",
-            width: { ideal: 640 },
-            height: { ideal: 480 }
+            width: { min: 640, ideal: 1280 },
+            height: { min: 480, ideal: 720 }
           },
-          area: { // defines rectangle of the detection/localization area
-            top: "0%",    // top offset
-            right: "0%",  // right offset
-            left: "0%",   // left offset
-            bottom: "0%"  // bottom offset
+          area: {
+            top: "35%",
+            right: "15%",
+            left: "15%",
+            bottom: "35%"
           }
         },
         decoder: {
-          readers: ["ean_reader"],
-          debug: {
-              drawBoundingBox: true,
-              showFrequency: true,
-              drawScanline: true,
-              showPattern: true
-          }          
+          readers: [{
+            format: "ean_reader",
+            config: { supplements: [] }
+          }]
         },
         locate: true,
+        locator: {
+          patchSize: "medium",
+          halfSample: true
+        },
         numOfWorkers: navigator.hardwareConcurrency || 4
-      }, function (err) {
+      }, err => {
         if (err) {
-          console.error(err);
           statusEl.textContent = "ไม่สามารถเปิดกล้องได้";
           startBtn.disabled = false;
           scanning = false;
@@ -171,42 +166,80 @@
         Quagga.start();
       });
 
+      Quagga.onProcessed(onProcessed);
       Quagga.onDetected(onDetected);
     }
 
-    // ===============================
-    // ON BARCODE DETECTED
-    // ===============================
     function onDetected(data) {
       const code = data.codeResult.code;
-      const format = data.codeResult.format;
+      if (!code || code.length !== 13) return;
 
-      //if (!code || code.length !== 13) return;
-      if (!code) return;
+      detectedCount[code] = (detectedCount[code] || 0) + 1;
 
-      Quagga.offDetected(onDetected);
-      Quagga.stop();
-
-      scanning = false;
-      startBtn.disabled = false;
-
-      cameraEl.style.display = "none";
-      resultEl.textContent = format + ": " + code;
-      statusEl.textContent = "สแกนสำเร็จ";
-
-      if (navigator.vibrate) {
-        navigator.vibrate(200);
+      if (detectedCount[code] >= 3) {
+        finalize(code);
       }
     }
 
-    // ===============================
-    // EVENTS
-    // ===============================
-    startBtn.addEventListener("click", startScanner);
+    function finalize(code) {
+      Quagga.stop();
+      Quagga.offDetected(onDetected);
+      Quagga.offProcessed(onProcessed);
 
-    // ===============================
-    // INIT
-    // ===============================
+      scanning = false;
+      startBtn.disabled = false;
+      cameraEl.style.display = "none";
+
+      resultEl.textContent = "EAN-13: " + code;
+      statusEl.textContent = "สแกนสำเร็จ";
+
+      if (navigator.vibrate) navigator.vibrate(200);
+    }
+
+    // =========================
+    // DEBUG OVERLAY
+    // =========================
+    function onProcessed(result) {
+      const ctx = Quagga.canvas.ctx.overlay;
+      const canvas = Quagga.canvas.dom.overlay;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (result) {
+        if (result.boxes) {
+          result.boxes
+            .filter(box => box !== result.box)
+            .forEach(box => {
+              Quagga.ImageDebug.drawPath(
+                box,
+                { x: 0, y: 1 },
+                ctx,
+                { color: "rgba(255, 255, 255, 0.3)", lineWidth: 1 }
+              );
+            });
+        }
+
+        if (result.box) {
+          Quagga.ImageDebug.drawPath(
+            result.box,
+            { x: 0, y: 1 },
+            ctx,
+            { color: "#00FF00", lineWidth: 2 }
+          );
+        }
+
+        if (result.line) {
+          Quagga.ImageDebug.drawPath(
+            result.line,
+            { x: "x", y: "y" },
+            ctx,
+            { color: "red", lineWidth: 3 }
+          );
+        }
+      }
+    }
+
+    startBtn.addEventListener("click", startScanner);
     initLIFF();
   </script>
 
