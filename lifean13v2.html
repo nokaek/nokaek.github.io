@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Quagga EAN-13 Scanner (Test Build)</title>
+  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      margin: 0;
+      padding: 0;
+    }
+
+    #controls {
+      padding: 10px;
+      background: #1e1e1e;
+    }
+
+    select, button {
+      font-size: 14px;
+      padding: 6px;
+      margin-right: 6px;
+    }
+
+    #scanner-container {
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 120px);
+      overflow: hidden;
+      background: black;
+    }
+
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    #result {
+      padding: 10px;
+      background: #222;
+      font-size: 18px;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: #ccc;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="controls">
+  <label>Camera:</label>
+  <select id="cameraSelect"></select>
+
+  <button onclick="startScanner()">Start Scan</button>
+  <button onclick="stopScanner()">Stop</button>
+
+  <div class="hint">
+    แนะนำ: ถือมือถือห่างบาร์โค้ด ~10–15 ซม.  
+    ถ้าไม่ติด ลองขยับเข้า–ออกเล็กน้อย
+  </div>
+</div>
+
+<div id="scanner-container"></div>
+
+<div id="result">
+  Result: <span id="code">-</span>
+</div>
+
+<script>
+  const cameraSelect = document.getElementById("cameraSelect");
+  const resultEl = document.getElementById("code");
+  let currentStream = null;
+
+  async function listCameras() {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === "videoinput");
+
+    cameraSelect.innerHTML = "";
+
+    videoDevices.forEach((device, index) => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      option.text =
+        device.label || `Camera ${index}`;
+      cameraSelect.appendChild(option);
+    });
+  }
+
+  async function startScanner() {
+    stopScanner();
+
+    const deviceId = cameraSelect.value;
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: document.querySelector("#scanner-container"),
+        constraints: {
+          deviceId: deviceId,
+          facingMode: "environment",
+          width: { ideal: 1600, max: 1920 },
+          height: { ideal: 900 },
+          aspectRatio: { ideal: 16 / 9 }
+        }
+      },
+
+      locate: true,
+
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+
+      decoder: {
+        readers: ["ean_reader"]
+      },
+
+      debug: {
+        drawBoundingBox: true,
+        drawScanline: true,
+        showPattern: true,
+        showFrequency: true
+      }
+    }, function (err) {
+      if (err) {
+        console.error(err);
+        alert("Init error: " + err.message);
+        return;
+      }
+      Quagga.start();
+    });
+
+    Quagga.onDetected(onDetected);
+    Quagga.onProcessed(onProcessed);
+  }
+
+  function stopScanner() {
+    try {
+      Quagga.stop();
+    } catch (e) {}
+    Quagga.offDetected(onDetected);
+    Quagga.offProcessed(onProcessed);
+  }
+
+  function onDetected(result) {
+    const code = result.codeResult.code;
+    resultEl.textContent = code;
+    console.log("Detected:", code);
+  }
+
+  function onProcessed(result) {
+    const ctx = Quagga.canvas.ctx.overlay;
+    const canvas = Quagga.canvas.dom.overlay;
+
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (result && result.boxes) {
+      result.boxes
+        .filter(box => box !== result.box)
+        .forEach(box => {
+          Quagga.ImageDebug.drawPath(
+            box,
+            { x: 0, y: 1 },
+            ctx,
+            { color: "green", lineWidth: 2 }
+          );
+        });
+    }
+
+    if (result && result.box) {
+      Quagga.ImageDebug.drawPath(
+        result.box,
+        { x: 0, y: 1 },
+        ctx,
+        { color: "red", lineWidth: 3 }
+      );
+    }
+
+    if (result && result.line) {
+      Quagga.ImageDebug.drawPath(
+        result.line,
+        { x: "x", y: "y" },
+        ctx,
+        { color: "red", lineWidth: 3 }
+      );
+    }
+  }
+
+  // initial load
+  navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+    stream.getTracks().forEach(t => t.stop());
+    listCameras();
+  });
+</script>
+
+</body>
+</html>
