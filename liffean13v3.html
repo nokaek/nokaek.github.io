@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8" />
-<title>EAN-13 Scanner UX Fixed</title>
+<title>EAN-13 Scanner UX + Debug</title>
 <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
 
 <style>
@@ -42,7 +42,7 @@
   #ux-overlay {
     position: absolute;
     inset: 0;
-    z-index: 20;
+    z-index: 30;
     pointer-events: none;
   }
 
@@ -54,22 +54,25 @@
     max-width: 420px;
     aspect-ratio: 3.5 / 1;
     transform: translate(-50%, -50%);
-    border: 2px solid rgba(255,255,255,0.7);
-    border-radius: 6px;
-    transition: border-color 0.2s;
+    border: 3px solid rgba(0, 255, 180, 0.9);
+    border-radius: 8px;
+    box-shadow: 0 0 12px rgba(0,255,180,0.6);
+    transition: border-color 0.2s, box-shadow 0.2s;
   }
 
   #focus-frame.success {
     border-color: #00ff88;
+    box-shadow: 0 0 16px rgba(0,255,136,0.9);
   }
 
   #hint {
     position: absolute;
-    top: calc(50% + 90px);
+    top: calc(50% + 95px);
     width: 100%;
     text-align: center;
-    font-size: 14px;
-    color: #ddd;
+    font-size: 15px;
+    color: #ffe66d;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
   }
 
   #result {
@@ -175,7 +178,8 @@
       debug: {
         drawBoundingBox: true,
         drawScanline: true,
-        showPattern: true
+        showPattern: true,
+        showFrequency: true
       }
     }, err => {
       if (err) {
@@ -186,12 +190,13 @@
     });
 
     Quagga.onDetected(onDetected);
+    Quagga.onProcessed(onProcessed);
   }
 
   function stopScanner() {
     try { Quagga.stop(); } catch {}
     Quagga.offDetected(onDetected);
-
+    Quagga.offProcessed(onProcessed);
     clearTimeout(hintTimer1);
     clearTimeout(hintTimer2);
   }
@@ -205,6 +210,45 @@
     resultEl.textContent = code;
 
     stopScanner();
+  }
+
+  function onProcessed(result) {
+    const ctx = Quagga.canvas.ctx.overlay;
+    const canvas = Quagga.canvas.dom.overlay;
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (result && result.boxes) {
+      result.boxes
+        .filter(b => b !== result.box)
+        .forEach(b => {
+          Quagga.ImageDebug.drawPath(
+            b,
+            { x: 0, y: 1 },
+            ctx,
+            { color: "rgba(0,255,0,0.5)", lineWidth: 2 }
+          );
+        });
+    }
+
+    if (result && result.box) {
+      Quagga.ImageDebug.drawPath(
+        result.box,
+        { x: 0, y: 1 },
+        ctx,
+        { color: "red", lineWidth: 3 }
+      );
+    }
+
+    if (result && result.line) {
+      Quagga.ImageDebug.drawPath(
+        result.line,
+        { x: "x", y: "y" },
+        ctx,
+        { color: "red", lineWidth: 3 }
+      );
+    }
   }
 
   navigator.mediaDevices.getUserMedia({ video: true }).then(s => {
