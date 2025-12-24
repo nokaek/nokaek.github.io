@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>EAN-13 Scanner (UX Test)</title>
+  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+
+    #controls {
+      padding: 10px;
+      background: #111;
+    }
+
+    select, button {
+      font-size: 14px;
+      padding: 6px;
+      margin-right: 6px;
+    }
+
+    #scanner-container {
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 160px);
+      overflow: hidden;
+    }
+
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    /* ===== UX Overlay ===== */
+    #focus-frame {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 80%;
+      max-width: 420px;
+      aspect-ratio: 3.5 / 1;
+      transform: translate(-50%, -50%);
+      border: 2px solid rgba(255,255,255,0.6);
+      border-radius: 6px;
+      pointer-events: none;
+      transition: border-color 0.2s;
+    }
+
+    #focus-frame.success {
+      border-color: #00ff88;
+    }
+
+    #hint {
+      position: absolute;
+      top: calc(50% + 80px);
+      width: 100%;
+      text-align: center;
+      font-size: 14px;
+      color: #ddd;
+      pointer-events: none;
+    }
+
+    #result {
+      padding: 10px;
+      background: #111;
+      font-size: 18px;
+    }
+
+    #manual-btn {
+      margin-top: 6px;
+      background: transparent;
+      color: #aaa;
+      border: none;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="controls">
+  <label>Camera:</label>
+  <select id="cameraSelect"></select>
+  <button onclick="startScanner()">Start</button>
+  <button onclick="stopScanner()">Stop</button>
+</div>
+
+<div id="scanner-container">
+  <div id="focus-frame"></div>
+  <div id="hint">จัดบาร์โค้ดให้อยู่ในกรอบ</div>
+</div>
+
+<div id="result">
+  Result: <span id="code">-</span><br>
+  <button id="manual-btn">ใส่รหัสบาร์โค้ดเอง</button>
+</div>
+
+<script>
+  const cameraSelect = document.getElementById("cameraSelect");
+  const resultEl = document.getElementById("code");
+  const hintEl = document.getElementById("hint");
+  const frameEl = document.getElementById("focus-frame");
+
+  let hintTimer = null;
+  let detectedOnce = false;
+
+  async function listCameras() {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === "videoinput");
+    cameraSelect.innerHTML = "";
+    cams.forEach((d, i) => {
+      const opt = document.createElement("option");
+      opt.value = d.deviceId;
+      opt.text = d.label || `Camera ${i}`;
+      cameraSelect.appendChild(opt);
+    });
+  }
+
+  function startScanner() {
+    stopScanner();
+    detectedOnce = false;
+    frameEl.classList.remove("success");
+    resultEl.textContent = "-";
+    hintEl.textContent = "จัดบาร์โค้ดให้อยู่ในกรอบ";
+
+    hintTimer = setTimeout(() => {
+      hintEl.textContent = "ถือมือถือห่างบาร์โค้ดประมาณ 1 ฝ่ามือ";
+    }, 3000);
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: document.querySelector("#scanner-container"),
+        constraints: {
+          deviceId: cameraSelect.value,
+          facingMode: "environment",
+          width: { ideal: 1600, max: 1920 },
+          height: { ideal: 900 }
+        }
+      },
+      locate: true,
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      decoder: {
+        readers: ["ean_reader"]
+      },
+      debug: {
+        drawBoundingBox: true,
+        drawScanline: true,
+        showPattern: true
+      }
+    }, err => {
+      if (err) {
+        alert(err.message);
+        return;
+      }
+      Quagga.start();
+    });
+
+    Quagga.onDetected(onDetected);
+    Quagga.onProcessed(onProcessed);
+  }
+
+  function stopScanner() {
+    try { Quagga.stop(); } catch {}
+    Quagga.offDetected(onDetected);
+    Quagga.offProcessed(onProcessed);
+    clearTimeout(hintTimer);
+  }
+
+  function onDetected(result) {
+    const code = result.codeResult.code;
+    detectedOnce = true;
+
+    frameEl.classList.add("success");
+    hintEl.textContent = "สแกนสำเร็จ";
+    resultEl.textContent = code;
+
+    stopScanner();
+  }
+
+  function onProcessed(result) {
+    if (result && result.box && !detectedOnce) {
+      hintEl.textContent = "ลองขยับมือถือเข้า–ออกเล็กน้อย";
+    }
+
+    const ctx = Quagga.canvas.ctx.overlay;
+    const canvas = Quagga.canvas.dom.overlay;
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (result && result.boxes) {
+      result.boxes
+        .filter(b => b !== result.box)
+        .forEach(b => {
+          Quagga.ImageDebug.drawPath(b, { x: 0, y: 1 }, ctx, {
+            color: "green", lineWidth: 2
+          });
+        });
+    }
+
+    if (result && result.box) {
+      Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, ctx, {
+        color: "red", lineWidth: 3
+      });
+    }
+
+    if (result && result.line) {
+      Quagga.ImageDebug.drawPath(result.line, { x: "x", y: "y" }, ctx, {
+        color: "red", lineWidth: 3
+      });
+    }
+  }
+
+  navigator.mediaDevices.getUserMedia({ video: true }).then(s => {
+    s.getTracks().forEach(t => t.stop());
+    listCameras();
+  });
+</script>
+
+</body>
+</html>
