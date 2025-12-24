@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<title>EAN-13 Scanner (Production + Debug)</title>
+<script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.js"></script>
+
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    font-family: Arial, sans-serif;
+    color: #fff;
+  }
+
+  #controls {
+    padding: 10px;
+    background: #111;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+
+  select, button, label {
+    font-size: 14px;
+  }
+
+  button {
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+
+  #scanner-wrapper {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 150px);
+    background: black;
+    overflow: hidden;
+  }
+
+  #scanner-container {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  /* ===== UX Overlay ===== */
+  #ux-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  #focus-frame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 82%;
+    max-width: 420px;
+    aspect-ratio: 3.5 / 1;
+    transform: translate(-50%, -50%);
+    border: 3px solid rgba(0,255,180,0.9);
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+    transition: border-color 0.2s;
+  }
+
+  #focus-frame.success {
+    border-color: #00ff88;
+  }
+
+  #hint {
+    position: absolute;
+    top: calc(50% + 100px);
+    width: 100%;
+    text-align: center;
+    font-size: 15px;
+    color: #eafff8;
+    text-shadow: 0 0 4px #000;
+  }
+
+  #result {
+    padding: 10px;
+    background: #111;
+    font-size: 18px;
+  }
+
+  #manual-btn {
+    margin-top: 6px;
+    background: none;
+    color: #9adfff;
+    border: none;
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 13px;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="controls">
+  <label>Camera:</label>
+  <select id="cameraSelect"></select>
+
+  <button onclick="startScanner()">Start</button>
+  <button onclick="stopScanner()">Stop</button>
+
+  <label>
+    <input type="checkbox" id="debugToggle" />
+    Debug
+  </label>
+</div>
+
+<div id="scanner-wrapper">
+  <div id="scanner-container"></div>
+
+  <div id="ux-overlay">
+    <div id="focus-frame"></div>
+    <div id="hint">จัดบาร์โค้ดให้อยู่ในกรอบ</div>
+  </div>
+</div>
+
+<div id="result">
+  Result: <span id="code">-</span><br>
+  <button id="manual-btn">ใส่รหัสบาร์โค้ดเอง</button>
+</div>
+
+<script>
+  const cameraSelect = document.getElementById("cameraSelect");
+  const resultEl = document.getElementById("code");
+  const hintEl = document.getElementById("hint");
+  const frameEl = document.getElementById("focus-frame");
+  const debugToggle = document.getElementById("debugToggle");
+
+  let detected = false;
+  let hintTimer1, hintTimer2;
+  let lastResult = null;
+
+  async function listCameras() {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === "videoinput");
+    cameraSelect.innerHTML = "";
+    cams.forEach((d, i) => {
+      const opt = document.createElement("option");
+      opt.value = d.deviceId;
+      opt.text = d.label || `Camera ${i}`;
+      cameraSelect.appendChild(opt);
+    });
+  }
+
+  function startScanner() {
+    stopScanner();
+
+    detected = false;
+    lastResult = null;
+    frameEl.classList.remove("success");
+    resultEl.textContent = "-";
+    hintEl.textContent = "จัดบาร์โค้ดให้อยู่ในกรอบ";
+
+    hintTimer1 = setTimeout(() => {
+      hintEl.textContent = "ถือมือถือห่างบาร์โค้ดประมาณ 1 ฝ่ามือ";
+    }, 3000);
+
+    hintTimer2 = setTimeout(() => {
+      if (!detected) {
+        hintEl.textContent = "ขยับมือถือเข้า–ออกเล็กน้อยเพื่อโฟกัส";
+      }
+    }, 6000);
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: document.querySelector("#scanner-container"),
+        constraints: {
+          deviceId: cameraSelect.value,
+          facingMode: "environment",
+          width: { ideal: 1600, max: 1920 },
+          height: { ideal: 900 }
+        }
+      },
+      locate: true,
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      decoder: {
+        readers: ["ean_reader"]
+      },
+      debug: debugToggle.checked
+    }, err => {
+      if (err) {
+        alert(err.message);
+        return;
+      }
+      Quagga.start();
+    });
+
+    Quagga.onProcessed(onProcessed);
+    Quagga.onDetected(onDetected);
+  }
+
+  function stopScanner() {
+    try { Quagga.stop(); } catch {}
+    Quagga.offProcessed(onProcessed);
+    Quagga.offDetected(onDetected);
+
+    clearTimeout(hintTimer1);
+    clearTimeout(hintTimer2);
+  }
+
+  function onProcessed(result) {
+    if (!debugToggle.checked) return;
+
+    const ctx = Quagga.canvas.ctx.overlay;
+    const canvas = Quagga.canvas.dom.overlay;
+    if (!ctx || !canvas) return;
+
+    if (result) lastResult = result;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!lastResult) return;
+
+    if (lastResult.boxes) {
+      lastResult.boxes
+        .filter(b => b !== lastResult.box)
+        .forEach(b => {
+          Quagga.ImageDebug.drawPath(
+            b, { x: 0, y: 1 }, ctx,
+            { color: "rgba(0,255,0,0.4)", lineWidth: 2 }
+          );
+        });
+    }
+
+    if (lastResult.box) {
+      Quagga.ImageDebug.drawPath(
+        lastResult.box, { x: 0, y: 1 }, ctx,
+        { color: "red", lineWidth: 3 }
+      );
+    }
+
+    if (lastResult.line) {
+      Quagga.ImageDebug.drawPath(
+        lastResult.line, { x: "x", y: "y" }, ctx,
+        { color: "red", lineWidth: 3 }
+      );
+    }
+  }
+
+  function isInsideFocusFrame(box) {
+    const frame = frameEl.getBoundingClientRect();
+    const video = document.querySelector("video").getBoundingClientRect();
+
+    const scaleX = video.width / Quagga.canvas.dom.image.width;
+    const scaleY = video.height / Quagga.canvas.dom.image.height;
+
+    const cx = box.reduce((s,p)=>s+p.x,0)/box.length * scaleX + video.left;
+    const cy = box.reduce((s,p)=>s+p.y,0)/box.length * scaleY + video.top;
+
+    return (
+      cx > frame.left && cx < frame.right &&
+      cy > frame.top && cy < frame.bottom
+    );
+  }
+
+  function onDetected(result) {
+    if (!isInsideFocusFrame(result.box)) {
+      hintEl.textContent = "กรุณาจัดบาร์โค้ดให้อยู่ในกรอบ";
+      return;
+    }
+
+    detected = true;
+    frameEl.classList.add("success");
+    resultEl.textContent = result.codeResult.code;
+    hintEl.textContent = "สแกนสำเร็จ";
+
+    stopScanner();
+  }
+
+  navigator.mediaDevices.getUserMedia({ video: true }).then(s => {
+    s.getTracks().forEach(t => t.stop());
+    listCameras();
+  });
+</script>
+
+</body>
+</html>
